@@ -19,6 +19,7 @@ zig build
 Add this to your `.zshrc`:
 ```
 precmd() {
-    PROMPT="$(<path-to-landspeeder>/landspeeder/zig-out/bin/landspeeder)"
+    export LAST_CMD_STATUS=$?
+    PROMPT="$(~/repos/landspeeder/zig-out/bin/landspeeder)"
 }
 ```
