@@ -34,23 +34,24 @@ precmd() {
 - [x] Display working directory
 - [x] Display git branch
 - [x] Display git unpushed/unpulled 
-- [] Truncate long paths
-- [] More colour
-- [] Indicate when in Vi mode
-- [] Display username and host when in ssh or container
+- [ ] Truncate long paths
+- [x] More colour
+- [ ] Indicate when in Vi mode
+- [ ] Display username and host when in ssh or container
 
 ### Polish
 
-- [] Add fish support
-- [] Add bash support
-- [] Handle some errors _quietly_
-- [] Build and package etc
-- [] Add sources of inspiration to readme
+- [ ] Add fish support
+- [ ] Add bash support
+- [ ] Handle some errors _quietly_
+- [ ] Build and package etc
+- [ ] Add sources of inspiration to readme
 
 ### Maybes
 
 Non-essentials (imo) that I might try to add.
 
-- [] Display git action (eg merge)
-- [] Display last command execution time
-- [] Display project language
+- [ ] ⚡
+- [ ] Display git action (eg merge)
+- [ ] Display last command execution time
+- [ ] Display project language
