@@ -115,13 +115,14 @@ fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
     const unpulled_str = std.mem.trimRight(u8, res.stdout[tab_idx.? + 1 ..], "\n");
     const unpulled = std.fmt.parseInt(u16, unpulled_str, 10) catch 0;
 
+    // TODO: show only the arrow for 1, arrow + count for > 1
     if (unpushed == 0 and unpulled == 0) {
         return null;
     } else if (unpushed > 0 and unpulled > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{u} {u}{u}", .{ UP_ARROW, unpushed, DOWN_ARROW, unpulled });
+        return try std.fmt.allocPrint(alloc, "{u}{d} {u}{d}", .{ UP_ARROW, unpushed, DOWN_ARROW, unpulled });
     } else if (unpushed > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{u}", .{ UP_ARROW, unpushed });
+        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ UP_ARROW, unpushed });
     } else {
-        return try std.fmt.allocPrint(alloc, "{u}{u}", .{ DOWN_ARROW, unpulled });
+        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ DOWN_ARROW, unpulled });
     }
 }
