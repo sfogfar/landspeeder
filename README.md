@@ -23,3 +23,16 @@ precmd() {
     PROMPT="$(~/repos/landspeeder/zig-out/bin/landspeeder)"
 }
 ```
+
+## TODO
+
+- [x] Display basic prompt
+- [x] Indicate last command status 
+- [x] Display working directory
+- [] Display git status
+- [] Display project language
+- [] Display last command execution time
+- [] Truncate long paths
+- [] Use terminal colour theme
+- [] Indicate when in Vi mode
+- [] Display username and host when in ssh or container
