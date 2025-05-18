@@ -29,7 +29,8 @@ precmd() {
 - [x] Display basic prompt
 - [x] Indicate last command status 
 - [x] Display working directory
-- [] Display git status
+- [x] Display git branch
+- [] Display git unpushed/unpulled 
 - [] Display project language
 - [] Display last command execution time
 - [] Truncate long paths

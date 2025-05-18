@@ -63,16 +63,26 @@ fn getStatusColourCode(env_map: *const std.process.EnvMap) ![]const u8 {
 }
 
 /// Returns a git branch name if in a git repo.
+/// Appends a `*` if the branch is dirty.
 /// Caller owns resulting string and should free it when done.
 fn getBranch(alloc: std.mem.Allocator) !?[]const u8 {
-    const cmd = &[_][]const u8{ "git", "branch", "--show-current" };
-    const res = try std.process.Child.run(.{ .allocator = alloc, .argv = cmd });
-    defer alloc.free(res.stdout);
-    defer alloc.free(res.stderr);
+    const branch_cmd = &[_][]const u8{ "git", "branch", "--show-current" };
+    const branch_res = try std.process.Child.run(.{ .allocator = alloc, .argv = branch_cmd });
+    defer alloc.free(branch_res.stdout);
+    defer alloc.free(branch_res.stderr);
 
-    // Git cmd failed, so assume we're not in a Git repo
-    if (res.term.Exited != 0) return null;
+    // `git branch --show-current` failed, so assume we're not in a Git repo
+    if (branch_res.term.Exited != 0) return null;
 
-    const branch_name = std.mem.trimRight(u8, res.stdout, "\n");
-    return try alloc.dupe(u8, branch_name);
+    const branch_name = std.mem.trimRight(u8, branch_res.stdout, "\n");
+
+    const dirty_cmd = &[_][]const u8{ "git", "status", "--porcelain" };
+    const dirty_res = try std.process.Child.run(.{ .allocator = alloc, .argv = dirty_cmd });
+    defer alloc.free(dirty_res.stdout);
+    defer alloc.free(dirty_res.stderr);
+
+    // Clean branch
+    if (dirty_res.stdout.len == 0) return try alloc.dupe(u8, branch_name);
+
+    return try std.fmt.allocPrint(alloc, "{s}*", .{branch_name});
 }
