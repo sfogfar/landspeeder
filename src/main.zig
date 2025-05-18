@@ -26,7 +26,10 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
+    const in_git_repo = try inGitRepo(alloc, &env_map);
+
     try stdout.print("{s}\n", .{display_path});
+    try stdout.print("Git? {any}\n", .{in_git_repo});
     try stdout.print("{s}{s}{u} ", .{ status_colour_code, BOLD, LAMBDA_CHAR });
 
     try bw.flush();
@@ -51,4 +54,27 @@ fn getStatusColourCode(env_map: *const std.process.EnvMap) ![]const u8 {
     const status_str = env_map.get("LAST_CMD_STATUS") orelse "0";
     const status_code = try std.fmt.parseInt(u8, status_str, 10);
     return if (status_code > 0) RED else GREEN;
+}
+
+fn inGitRepo(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) !bool {
+    const home = env_map.get("HOME") orelse "";
+
+    var dir_to_check = env_map.get("PWD") orelse home;
+    // Limit dirs to check, if deeply nested this may mean we miss the git repo
+    for (0..5) |_| {
+        const path_to_check = try std.fs.path.join(alloc, &[_][]const u8{ dir_to_check, ".git" });
+        defer alloc.free(path_to_check);
+
+        if (std.fs.openDirAbsolute(path_to_check, std.fs.Dir.OpenOptions{ .access_sub_paths = false })) |gitdir| {
+            @constCast(&gitdir).close(); // gitdir is a *const fs.Dir, we need a *fs.Dir
+            return true;
+        } else |_| {
+            // Return early if we're already at root or $HOME
+            if (dir_to_check.len <= 1) return false;
+            if (std.mem.eql(u8, dir_to_check, home)) return false;
+
+            const last_slash_idx = std.mem.lastIndexOf(u8, dir_to_check, "/") orelse dir_to_check.len;
+            dir_to_check = dir_to_check[0..last_slash_idx];
+        }
+    } else return false;
 }
