@@ -54,7 +54,7 @@ fn getPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]cons
 
     // Attempt to replace full $HOME with ~
     if (std.mem.startsWith(u8, pwd, home) and home.len > 0) {
-        return try std.fmt.allocPrint(alloc, "~{s}", .{pwd[home.len..]});
+        return try std.fmt.allocPrint(alloc, "{s}~{s}{s}", .{ ansi.blue, pwd[home.len..], ansi.reset });
     } else {
         return try alloc.dupe(u8, pwd);
     }
@@ -91,9 +91,11 @@ fn getBranch(alloc: std.mem.Allocator) !?[]const u8 {
     defer alloc.free(dirty_res.stderr);
 
     // Clean branch
-    if (dirty_res.stdout.len == 0) return try alloc.dupe(u8, branch_name);
+    if (dirty_res.stdout.len == 0) {
+        return try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ ansi.magenta, branch_name, ansi.reset });
+    }
 
-    return try std.fmt.allocPrint(alloc, "{s}*", .{branch_name});
+    return try std.fmt.allocPrint(alloc, "{s}{s}*{s}", .{ ansi.magenta, branch_name, ansi.reset });
 }
 
 fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
@@ -119,11 +121,11 @@ fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
     if (unpushed == 0 and unpulled == 0) {
         return null;
     } else if (unpushed > 0 and unpulled > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{d} {u}{d}", .{ symbols.up_arrow, unpushed, symbols.down_arrow, unpulled });
+        return try std.fmt.allocPrint(alloc, "{s}{s}{d} {s}{d}{s}", .{ ansi.cyan, symbols.up_arrow, unpushed, symbols.down_arrow, unpulled, ansi.reset });
     } else if (unpushed > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ symbols.up_arrow, unpushed });
+        return try std.fmt.allocPrint(alloc, "{s}{s}{d}{s}", .{ ansi.cyan, symbols.up_arrow, unpushed, ansi.reset });
     } else {
-        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ symbols.down_arrow, unpulled });
+        return try std.fmt.allocPrint(alloc, "{s}{s}{d}{s}", .{ ansi.cyan, symbols.down_arrow, unpulled, ansi.reset });
     }
 }
 
