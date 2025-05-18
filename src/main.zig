@@ -14,22 +14,28 @@ pub fn main() !void {
     const alloc = gpa.allocator();
     defer _ = gpa.deinit();
 
+    // Gather information
     var env_map = try std.process.getEnvMap(alloc);
     defer env_map.deinit();
 
-    const display_path = try getDisplayPath(alloc, &env_map);
-    defer alloc.free(display_path);
+    const path = try getPath(alloc, &env_map);
+    defer alloc.free(path);
 
     const status_colour_code = try getStatusColourCode(&env_map);
 
+    const maybe_branch = try getBranch(alloc);
+    defer if (maybe_branch) |branch| alloc.free(branch);
+
+    // Display information
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    const in_git_repo = try inGitRepo(alloc, &env_map);
-
-    try stdout.print("{s}\n", .{display_path});
-    try stdout.print("Git? {any}\n", .{in_git_repo});
+    if (maybe_branch) |branch| {
+        try stdout.print("{s} {s}\n", .{ path, branch });
+    } else {
+        try stdout.print("{s}\n", .{path});
+    }
     try stdout.print("{s}{s}{u} ", .{ status_colour_code, BOLD, LAMBDA_CHAR });
 
     try bw.flush();
@@ -37,8 +43,8 @@ pub fn main() !void {
 
 /// Returns a formatted path.
 /// Caller owns resulting string and should free it when done.
-fn getDisplayPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]const u8 {
-    const pwd = env_map.get("PWD") orelse "unknown";
+fn getPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]const u8 {
+    const pwd = env_map.get("PWD") orelse "pwd-unknown";
     const home = env_map.get("HOME") orelse "";
 
     // Attempt to replace full $HOME with ~
@@ -56,25 +62,17 @@ fn getStatusColourCode(env_map: *const std.process.EnvMap) ![]const u8 {
     return if (status_code > 0) RED else GREEN;
 }
 
-fn inGitRepo(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) !bool {
-    const home = env_map.get("HOME") orelse "";
+/// Returns a git branch name if in a git repo.
+/// Caller owns resulting string and should free it when done.
+fn getBranch(alloc: std.mem.Allocator) !?[]const u8 {
+    const cmd = &[_][]const u8{ "git", "branch", "--show-current" };
+    const res = try std.process.Child.run(.{ .allocator = alloc, .argv = cmd });
+    defer alloc.free(res.stdout);
+    defer alloc.free(res.stderr);
 
-    var dir_to_check = env_map.get("PWD") orelse home;
-    // Limit dirs to check, if deeply nested this may mean we miss the git repo
-    for (0..5) |_| {
-        const path_to_check = try std.fs.path.join(alloc, &[_][]const u8{ dir_to_check, ".git" });
-        defer alloc.free(path_to_check);
+    // Git cmd failed, so assume we're not in a Git repo
+    if (res.term.Exited != 0) return null;
 
-        if (std.fs.openDirAbsolute(path_to_check, std.fs.Dir.OpenOptions{ .access_sub_paths = false })) |gitdir| {
-            @constCast(&gitdir).close(); // gitdir is a *const fs.Dir, we need a *fs.Dir
-            return true;
-        } else |_| {
-            // Return early if we're already at root or $HOME
-            if (dir_to_check.len <= 1) return false;
-            if (std.mem.eql(u8, dir_to_check, home)) return false;
-
-            const last_slash_idx = std.mem.lastIndexOf(u8, dir_to_check, "/") orelse dir_to_check.len;
-            dir_to_check = dir_to_check[0..last_slash_idx];
-        }
-    } else return false;
+    const branch_name = std.mem.trimRight(u8, res.stdout, "\n");
+    return try alloc.dupe(u8, branch_name);
 }
