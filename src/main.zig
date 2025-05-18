@@ -1,6 +1,9 @@
 const std = @import("std");
 
-const LAMBDA_CHAR = 0x03BB;
+// Symbols
+const LAMBDA = 0x03BB;
+const UP_ARROW = 0x2191;
+const DOWN_ARROW = 0x2193;
 
 // ANSI escape codes
 const BOLD = "\x1b[1m";
@@ -8,6 +11,7 @@ const RED = "\x1b[31m";
 const GREEN = "\x1b[32m";
 const RESET = "\x1b[0m";
 
+// TODO: pass buffers to fns returning strs to simplify memory mgmt
 pub fn main() !void {
     // TODO: switch to the arena alloc once stable(ish)
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -23,20 +27,25 @@ pub fn main() !void {
 
     const status_colour_code = try getStatusColourCode(&env_map);
 
+    // TODO: refactor so all git is got from one call
     const maybe_branch = try getBranch(alloc);
     defer if (maybe_branch) |branch| alloc.free(branch);
+
+    const maybe_unpushed_unpulled = try getUnpushedUnpulled(alloc);
+    defer if (maybe_unpushed_unpulled) |unpushed_unpulled| alloc.free(unpushed_unpulled);
 
     // Display information
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    if (maybe_branch) |branch| {
-        try stdout.print("{s} {s}\n", .{ path, branch });
+    // This seems incomplete, but we should always have both really
+    if (maybe_branch != null and maybe_unpushed_unpulled != null) {
+        try stdout.print("{s} {s} {s}\n", .{ path, maybe_branch.?, maybe_unpushed_unpulled.? });
     } else {
         try stdout.print("{s}\n", .{path});
     }
-    try stdout.print("{s}{s}{u} ", .{ status_colour_code, BOLD, LAMBDA_CHAR });
+    try stdout.print("{s}{s}{u} ", .{ status_colour_code, BOLD, LAMBDA });
 
     try bw.flush();
 }
@@ -85,4 +94,34 @@ fn getBranch(alloc: std.mem.Allocator) !?[]const u8 {
     if (dirty_res.stdout.len == 0) return try alloc.dupe(u8, branch_name);
 
     return try std.fmt.allocPrint(alloc, "{s}*", .{branch_name});
+}
+
+fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
+    const cmd = &[_][]const u8{ "git", "rev-list", "--count", "--left-right", "HEAD...@{upstream}" };
+    const res = try std.process.Child.run(.{ .allocator = alloc, .argv = cmd });
+    defer alloc.free(res.stdout);
+    defer alloc.free(res.stderr);
+
+    if (res.term.Exited != 0) return null;
+
+    const tab_idx = std.mem.indexOf(u8, res.stdout, "\t");
+
+    // TODO: error here?
+    if (tab_idx == null) return null;
+
+    const unpushed_str = res.stdout[0..tab_idx.?];
+    const unpushed = std.fmt.parseInt(u16, unpushed_str, 10) catch 0;
+
+    const unpulled_str = std.mem.trimRight(u8, res.stdout[tab_idx.? + 1 ..], "\n");
+    const unpulled = std.fmt.parseInt(u16, unpulled_str, 10) catch 0;
+
+    if (unpushed == 0 and unpulled == 0) {
+        return null;
+    } else if (unpushed > 0 and unpulled > 0) {
+        return try std.fmt.allocPrint(alloc, "{u}{u} {u}{u}", .{ UP_ARROW, unpushed, DOWN_ARROW, unpulled });
+    } else if (unpushed > 0) {
+        return try std.fmt.allocPrint(alloc, "{u}{u}", .{ UP_ARROW, unpushed });
+    } else {
+        return try std.fmt.allocPrint(alloc, "{u}{u}", .{ DOWN_ARROW, unpulled });
+    }
 }
