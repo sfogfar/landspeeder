@@ -4,13 +4,13 @@
   <img src="landspeeder.png" alt="Screenshot of the prompt in different states" width="800">
 </div>
 
-## A not at all clever or customisable shell prompt.
+## A not at all clever or customisable shell prompt
 
 - Not at all customisable (yet).
 
 - Supports Zsh and macOS (so far).
 
-## How to use it:
+## How to use it
 
 Build it:
 ```
