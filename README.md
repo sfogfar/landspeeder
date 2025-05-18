@@ -1,13 +1,14 @@
 <div align="center">
   <h1>💨 landspeeder 💨</h1>
   <p>More of an X-34 than an XP-38, but it should be enough</p>
+  <img src="landspeeder.png" alt="Screenshot of the prompt in different states" width="800">
 </div>
 
 ## A not at all clever or customisable shell prompt.
 
-Not at all customisable (yet).
+- Not at all customisable (yet).
 
-Supports Zsh and macOS (so far).
+- Supports Zsh and macOS (so far).
 
 ## How to use it:
 

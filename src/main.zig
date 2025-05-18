@@ -39,6 +39,7 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
+    try stdout.print("\n", .{});
     if (maybe_branch != null and maybe_unpushed_unpulled != null) {
         try stdout.print("{s} {s} {s}\n", .{ path, maybe_branch.?, maybe_unpushed_unpulled.? });
     } else if (maybe_branch != null) {
