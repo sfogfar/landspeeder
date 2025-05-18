@@ -1,15 +1,8 @@
 const std = @import("std");
 
-// Symbols
-const LAMBDA = 0x03BB;
-const UP_ARROW = 0x2191;
-const DOWN_ARROW = 0x2193;
-
-// ANSI escape codes
-const BOLD = "\x1b[1m";
-const RED = "\x1b[31m";
-const GREEN = "\x1b[32m";
-const RESET = "\x1b[0m";
+const config = struct {
+    const prompt_symbol = symbols.lambda;
+};
 
 // TODO: pass buffers to fns returning strs to simplify memory mgmt
 pub fn main() !void {
@@ -25,14 +18,15 @@ pub fn main() !void {
     const path = try getPath(alloc, &env_map);
     defer alloc.free(path);
 
-    const status_colour_code = try getStatusColourCode(&env_map);
-
     // TODO: refactor so all git is got from one call
     const maybe_branch = try getBranch(alloc);
     defer if (maybe_branch) |branch| alloc.free(branch);
 
     const maybe_unpushed_unpulled = try getUnpushedUnpulled(alloc);
     defer if (maybe_unpushed_unpulled) |unpushed_unpulled| alloc.free(unpushed_unpulled);
+
+    const prompt = try getPrompt(alloc, &env_map);
+    defer alloc.free(prompt);
 
     // Display information
     const stdout_file = std.io.getStdOut().writer();
@@ -47,7 +41,7 @@ pub fn main() !void {
     } else {
         try stdout.print("{s}\n", .{path});
     }
-    try stdout.print("{s}{s}{u}{s} ", .{ status_colour_code, BOLD, LAMBDA, RESET });
+    try stdout.print("{s}", .{prompt});
 
     try bw.flush();
 }
@@ -66,11 +60,15 @@ fn getPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]cons
     }
 }
 
-/// Returns the exit code of the last command.
-fn getStatusColourCode(env_map: *const std.process.EnvMap) ![]const u8 {
+/// Returns the prompt, using colour to indicate the last command status.
+/// Caller owns resulting string and should free it when done.
+fn getPrompt(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]const u8 {
     const status_str = env_map.get("LAST_CMD_STATUS") orelse "0";
-    const status_code = try std.fmt.parseInt(u8, status_str, 10);
-    return if (status_code > 0) RED else GREEN;
+    const status = try std.fmt.parseInt(u8, status_str, 10);
+
+    const colour_seq = if (status == 0) ansi.magenta else ansi.red;
+
+    return std.fmt.allocPrint(alloc, "{s}{s}{s}{s} ", .{ ansi.bold, colour_seq, config.prompt_symbol, ansi.reset });
 }
 
 /// Returns a git branch name if in a git repo.
@@ -121,10 +119,35 @@ fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
     if (unpushed == 0 and unpulled == 0) {
         return null;
     } else if (unpushed > 0 and unpulled > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{d} {u}{d}", .{ UP_ARROW, unpushed, DOWN_ARROW, unpulled });
+        return try std.fmt.allocPrint(alloc, "{u}{d} {u}{d}", .{ symbols.up_arrow, unpushed, symbols.down_arrow, unpulled });
     } else if (unpushed > 0) {
-        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ UP_ARROW, unpushed });
+        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ symbols.up_arrow, unpushed });
     } else {
-        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ DOWN_ARROW, unpulled });
+        return try std.fmt.allocPrint(alloc, "{u}{d}", .{ symbols.down_arrow, unpulled });
     }
 }
+
+const ansi = struct {
+    const reset = ansiSeq("0");
+
+    const bold = ansiSeq("1");
+    const italic = ansiSeq("3");
+
+    const black = ansiSeq("30");
+    const red = ansiSeq("31");
+    const green = ansiSeq("32");
+    const yellow = ansiSeq("33");
+    const blue = ansiSeq("34");
+    const magenta = ansiSeq("35");
+    const cyan = ansiSeq("36");
+    const white = ansiSeq("37");
+};
+fn ansiSeq(comptime code: []const u8) []const u8 {
+    return "\x1b[" ++ code ++ "m";
+}
+
+const symbols = struct {
+    const lambda = "λ";
+    const up_arrow = "↑";
+    const down_arrow = "↓";
+};
