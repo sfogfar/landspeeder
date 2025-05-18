@@ -45,7 +45,7 @@ pub fn main() !void {
     } else {
         try stdout.print("{s}\n", .{path});
     }
-    try stdout.print("{s}{s}{u} ", .{ status_colour_code, BOLD, LAMBDA });
+    try stdout.print("{s}{s}{u}{s} ", .{ status_colour_code, BOLD, LAMBDA, RESET });
 
     try bw.flush();
 }
