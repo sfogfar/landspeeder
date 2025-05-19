@@ -68,7 +68,7 @@ fn getPrompt(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]co
 
     const colour_seq = if (status == 0) ansi.magenta else ansi.red;
 
-    return std.fmt.allocPrint(alloc, "{s}{s}{s}{s} ", .{ ansi.bold, colour_seq, config.prompt_symbol, ansi.reset });
+    return std.fmt.allocPrint(alloc, "{s}{s}{s} ", .{ colour_seq, config.prompt_symbol, ansi.reset });
 }
 
 /// Returns a git branch name if in a git repo.
