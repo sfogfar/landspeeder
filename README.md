@@ -1,6 +1,6 @@
 <div align="center">
   <h1>💨 landspeeder 💨</h1>
-  <p>More of an X-34 than an XP-38, but it should be enough</p>
+  <p>More of an X-34 than an XP-38</p>
   <img src="landspeeder.png" alt="Screenshot of the prompt in different states" width="800">
 </div>
 
