@@ -4,6 +4,8 @@ const config = struct {
     const prompt_symbol = symbols.lambda;
 };
 
+const promptError = error{ NotAGitRepo, UnexpectedResponse };
+
 // TODO: pass buffers to fns returning strs to simplify memory mgmt
 pub fn main() !void {
     // TODO: switch to the arena alloc once stable(ish)
@@ -19,14 +21,14 @@ pub fn main() !void {
     defer alloc.free(path);
 
     // TODO: refactor so all git is got from one call
-    const maybe_branch = try getBranch(alloc);
+    const maybe_branch = try getBranchName(alloc);
     defer if (maybe_branch) |branch| alloc.free(branch);
 
-    const maybe_unpushed_unpulled = try getUnpushedUnpulled(alloc);
+    const maybe_unpushed_unpulled = try getGitDivergence(alloc);
     defer if (maybe_unpushed_unpulled) |unpushed_unpulled| alloc.free(unpushed_unpulled);
 
-    const prompt = try getPrompt(alloc, &env_map);
-    defer alloc.free(prompt);
+    // const prompt = try getPrompt(alloc, &env_map);
+    // defer alloc.free(prompt);
 
     // Display information
     const stdout_file = std.io.getStdOut().writer();
@@ -41,12 +43,12 @@ pub fn main() !void {
     } else {
         try stdout.print("{s}\n", .{path});
     }
-    try stdout.print("{s}", .{prompt});
+    // try stdout.print("{s}", .{prompt});
 
     try bw.flush();
 }
 
-/// Returns a formatted path.
+/// Returns the pwd. Replaces $HOME with ~ for brevity.
 /// Caller owns resulting string and should free it when done.
 fn getPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]const u8 {
     const pwd = env_map.get("PWD") orelse "pwd-unknown";
@@ -54,79 +56,62 @@ fn getPath(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]cons
 
     // Attempt to replace full $HOME with ~
     if (std.mem.startsWith(u8, pwd, home) and home.len > 0) {
-        return try std.fmt.allocPrint(alloc, "{s}~{s}{s}", .{ ansi.blue, pwd[home.len..], ansi.reset });
+        return try std.fmt.allocPrint(alloc, "~{s}", .{pwd[home.len..]});
     } else {
         return try alloc.dupe(u8, pwd);
     }
 }
 
-/// Returns the prompt, using colour to indicate the last command status.
-/// Caller owns resulting string and should free it when done.
-fn getPrompt(alloc: std.mem.Allocator, env_map: *const std.process.EnvMap) ![]const u8 {
+fn lastCmdSucceeded(env_map: *const std.process.EnvMap) bool {
     const status_str = env_map.get("LAST_CMD_STATUS") orelse "0";
-    const status = try std.fmt.parseInt(u8, status_str, 10);
+    const status = std.fmt.parseInt(u8, status_str, 10) catch return error.UnexpectedResponse;
 
-    const colour_seq = if (status == 0) ansi.magenta else ansi.red;
-
-    return std.fmt.allocPrint(alloc, "{s}{s}{s} ", .{ colour_seq, config.prompt_symbol, ansi.reset });
+    return status == 0;
 }
 
-/// Returns a git branch name if in a git repo.
-/// Appends a `*` if the branch is dirty.
 /// Caller owns resulting string and should free it when done.
-fn getBranch(alloc: std.mem.Allocator) !?[]const u8 {
-    const branch_cmd = &[_][]const u8{ "git", "branch", "--show-current" };
-    const branch_res = try std.process.Child.run(.{ .allocator = alloc, .argv = branch_cmd });
-    defer alloc.free(branch_res.stdout);
-    defer alloc.free(branch_res.stderr);
+fn getBranchName(alloc: std.mem.Allocator) ![]const u8 {
+    const get_branch_cmd = &[_][]const u8{ "git", "branch", "--show-current" };
+    const get_branch_res = try std.process.Child.run(.{ .allocator = alloc, .argv = get_branch_cmd });
+    defer alloc.free(get_branch_res.stdout);
+    defer alloc.free(get_branch_res.stderr);
 
-    // `git branch --show-current` failed, so assume we're not in a Git repo
-    if (branch_res.term.Exited != 0) return null;
+    if (get_branch_res.term.Exited != 0) return error.NotAGitRepo;
 
-    const branch_name = std.mem.trimRight(u8, branch_res.stdout, "\n");
+    const branch_name = std.mem.trimRight(u8, get_branch_res.stdout, "\n");
 
-    const dirty_cmd = &[_][]const u8{ "git", "status", "--porcelain" };
-    const dirty_res = try std.process.Child.run(.{ .allocator = alloc, .argv = dirty_cmd });
-    defer alloc.free(dirty_res.stdout);
-    defer alloc.free(dirty_res.stderr);
-
-    // Clean branch
-    if (dirty_res.stdout.len == 0) {
-        return try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ ansi.magenta, branch_name, ansi.reset });
-    }
-
-    return try std.fmt.allocPrint(alloc, "{s}{s}*{s}", .{ ansi.magenta, branch_name, ansi.reset });
+    return try std.fmt.allocPrint(alloc, "{s}", .{branch_name});
 }
 
-fn getUnpushedUnpulled(alloc: std.mem.Allocator) !?[]const u8 {
-    const cmd = &[_][]const u8{ "git", "rev-list", "--count", "--left-right", "HEAD...@{upstream}" };
-    const res = try std.process.Child.run(.{ .allocator = alloc, .argv = cmd });
-    defer alloc.free(res.stdout);
-    defer alloc.free(res.stderr);
+fn isDirtyBranch(alloc: std.mem.Allocator) !bool {
+    const git_status_cmd = &[_][]const u8{ "git", "status", "--porcelain" };
+    const git_status_res = try std.process.Child.run(.{ .allocator = alloc, .argv = git_status_cmd });
+    defer alloc.free(git_status_res.stdout);
+    defer alloc.free(git_status_res.stderr);
 
-    if (res.term.Exited != 0) return null;
+    if (git_status_res.term.Exited != 0) return error.NotAGitRepo;
 
-    const tab_idx = std.mem.indexOf(u8, res.stdout, "\t");
+    return git_status_res.stdout.len > 0;
+}
 
-    // TODO: error here?
-    if (tab_idx == null) return null;
+fn getGitDivergence(alloc: std.mem.Allocator) !struct { ahead: u16, behind: u16 } {
+    // Prints the number of commits unique commits on each side separated by a tab.
+    const rev_list_cmd = &[_][]const u8{ "git", "rev-list", "--count", "--left-right", "HEAD...@{upstream}" };
+    const rev_list_res = try std.process.Child.run(.{ .allocator = alloc, .argv = rev_list_cmd });
+    defer alloc.free(rev_list_res.stdout);
+    defer alloc.free(rev_list_res.stderr);
 
-    const unpushed_str = res.stdout[0..tab_idx.?];
-    const unpushed = std.fmt.parseInt(u16, unpushed_str, 10) catch 0;
+    if (rev_list_res.term.Exited != 0) return error.NotAGitRepo;
 
-    const unpulled_str = std.mem.trimRight(u8, res.stdout[tab_idx.? + 1 ..], "\n");
-    const unpulled = std.fmt.parseInt(u16, unpulled_str, 10) catch 0;
+    const tab_idx = std.mem.indexOf(u8, rev_list_res.stdout, "\t") orelse return error.UnexpectedResponse;
 
-    // TODO: show only the arrow for 1, arrow + count for > 1
-    if (unpushed == 0 and unpulled == 0) {
-        return null;
-    } else if (unpushed > 0 and unpulled > 0) {
-        return try std.fmt.allocPrint(alloc, "{s}{s}{d} {s}{d}{s}", .{ ansi.cyan, symbols.up_arrow, unpushed, symbols.down_arrow, unpulled, ansi.reset });
-    } else if (unpushed > 0) {
-        return try std.fmt.allocPrint(alloc, "{s}{s}{d}{s}", .{ ansi.cyan, symbols.up_arrow, unpushed, ansi.reset });
-    } else {
-        return try std.fmt.allocPrint(alloc, "{s}{s}{d}{s}", .{ ansi.cyan, symbols.down_arrow, unpulled, ansi.reset });
-    }
+    const ahead_str = rev_list_res.stdout[0..tab_idx];
+    const ahead = std.fmt.parseInt(u16, ahead_str, 10) catch return error.UnexpectedResponse;
+
+    const behind_str = std.mem.trimRight(u8, rev_list_res.stdout[tab_idx + 1 ..], "\n");
+    const behind = std.fmt.parseInt(u16, behind_str, 10) catch return error.UnexpectedResponse;
+
+    return .{ .ahead = ahead, .behind = behind };
 }
 
 const ansi = struct {
@@ -145,7 +130,7 @@ const ansi = struct {
     const white = ansiSeq("37");
 };
 fn ansiSeq(comptime code: []const u8) []const u8 {
-    return "\x1b[" ++ code ++ "m";
+    return "\x1b[0;" ++ code ++ "m";
 }
 
 const symbols = struct {

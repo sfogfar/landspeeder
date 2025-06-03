@@ -34,7 +34,6 @@ precmd() {
 - [x] Display working directory
 - [x] Display git branch
 - [x] Display git unpushed/unpulled 
-- [ ] Truncate long paths
 - [x] More colour
 - [ ] Indicate when in Vi mode
 - [ ] Display username and host when in ssh or container
@@ -53,5 +52,14 @@ Non-essentials (imo) that I might try to add.
 
 - [ ] ⚡
 - [ ] Display git action (eg merge)
+- [ ] Show background process (eg suspended vim)
 - [ ] Display last command execution time
+- [ ] Truncate long paths
+- [ ] Display battery status
 - [ ] Display project language
+
+#### How to truncate long paths
+
+- This could be limiting the number of parent directories shown.
+- This could be limiting the chars shown per parent directory.
+- This could be showing just the current directory name if in a Git repository.
